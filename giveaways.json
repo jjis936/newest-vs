@@ -1,0 +1,55 @@
+{
+  "orders": [
+    {
+      "id": "SN-0001",
+      "buyer": "userid",
+      "provider": "test-value",
+      "service": "test-value",
+      "country": "test-value",
+      "status": "pending",
+      "code": null,
+      "created": "2026-07-19T17:15:50.508Z"
+    },
+    {
+      "id": "SN-0002",
+      "buyer": "userid",
+      "provider": "test-value",
+      "service": "test-value",
+      "country": "test-value",
+      "status": "pending",
+      "code": null,
+      "created": "2026-07-19T17:16:55.862Z"
+    },
+    {
+      "id": "SN-0003",
+      "buyer": "userid",
+      "provider": "test-value",
+      "service": "test-value",
+      "country": "test-value",
+      "status": "pending",
+      "code": null,
+      "created": "2026-07-19T17:17:00.894Z"
+    },
+    {
+      "id": "SN-0004",
+      "buyer": "userid",
+      "provider": "test-value",
+      "service": "test-value",
+      "country": "test-value",
+      "status": "pending",
+      "code": null,
+      "created": "2026-07-19T17:17:10.266Z"
+    },
+    {
+      "id": "SN-0005",
+      "buyer": "userid",
+      "provider": "test-value",
+      "service": "test-value",
+      "country": "test-value",
+      "status": "pending",
+      "code": null,
+      "created": "2026-07-19T17:18:03.457Z"
+    }
+  ],
+  "counter": 6
+}
