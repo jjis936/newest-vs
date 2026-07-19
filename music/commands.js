@@ -1,297 +1,817 @@
 // music/commands.js
-// All music slash commands (/play, /pause, /resume, /skip, /previous,
-// /stop, /queue, /shuffle, /loop, /volume, /nowplaying) plus the
-// autocomplete handler for /play. Exported as `musicSlashCommands` in the
-// exact same { data, execute } shape your existing commands.js uses, so
-// bot.js and deploy-commands.js can merge them in with zero surprises.
+// Music slash commands for Lavalink/Shoukaku system.
 
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+
 const { queueManager } = require("./queueManager");
 const { resolve } = require("./resolver");
 const { buildNowPlayingEmbed, buildQueueEmbed } = require("./embeds");
 const { buildControlRows } = require("./buttons");
-const { playNext, playPrevious, destroyQueue, sendOrUpdateNowPlaying, registerPlayerEvents } = require("./player");
-const { inSameVoice, cycleLoop, loopLabel } = require("./util");
+const {
+    playNext,
+    playPrevious,
+    destroyQueue,
+    sendOrUpdateNowPlaying,
+    registerPlayerEvents
+} = require("./player");
+
+const {
+    inSameVoice,
+    cycleLoop,
+    loopLabel
+} = require("./util");
+
 
 const MUSIC_COLOR = "#B30000";
 
+
+// /play autocomplete
 async function musicAutocomplete(interaction) {
+
     const focused = interaction.options.getFocused();
-    if (!focused || focused.trim().length < 2) return interaction.respond([]);
+
+    if (!focused || focused.trim().length < 2) {
+        return interaction.respond([]);
+    }
 
     try {
-        const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(focused)}&limit=20`);
+
+        const res = await fetch(
+            `https://api.deezer.com/search?q=${encodeURIComponent(focused)}&limit=20`
+        );
+
         const data = await res.json();
 
         const choices = (data.data || [])
             .slice(0, 25)
-            .map(t => {
-                const name = `${t.title} — ${t.artist.name}`.slice(0, 100);
-                const value = `${t.artist.name} ${t.title}`.slice(0, 100);
-                return { name, value };
+            .map(track => {
+
+                const name =
+                    `${track.title} — ${track.artist.name}`
+                    .slice(0, 100);
+
+                const value =
+                    `${track.artist.name} ${track.title}`
+                    .slice(0, 100);
+
+                return {
+                    name,
+                    value
+                };
             });
 
+
         await interaction.respond(choices);
+
+
     } catch (err) {
-        console.log(`[music] ⚠️ autocomplete lookup failed: ${err.message}`);
+
+        console.log(
+            `[music] ⚠️ autocomplete failed: ${err.message}`
+        );
+
         await interaction.respond([]).catch(() => {});
     }
 }
 
+
+
 const musicSlashCommands = [
 
-    // -- /play ---------------------------------------------------------------
+    // ==========================
+    // /play
+    // ==========================
+
     {
         data: new SlashCommandBuilder()
             .setName("play")
-            .setDescription("Play a song, playlist, or link from YouTube, Spotify, Apple Music, SoundCloud, Deezer, or Bandcamp")
-            .addStringOption(o => o
-                .setName("query")
-                .setDescription("Song name, artist, or a link")
-                .setRequired(true)
-                .setAutocomplete(true)),
+            .setDescription(
+                "Play a song from YouTube, Spotify, Apple Music, SoundCloud, Deezer, or Bandcamp"
+            )
+            .addStringOption(option =>
+                option
+                    .setName("query")
+                    .setDescription("Song name, artist, or link")
+                    .setRequired(true)
+                    .setAutocomplete(true)
+            ),
+
 
         async execute(interaction) {
 
-            const voiceChannel = interaction.member.voice?.channel;
+            const voiceChannel =
+                interaction.member.voice?.channel;
+
+
             if (!voiceChannel) {
-                return interaction.reply({ content: "❌ Join a voice channel first.", ephemeral: true });
+
+                return interaction.reply({
+                    content: "❌ Join a voice channel first.",
+                    ephemeral: true
+                });
+
             }
 
-            const permissions = voiceChannel.permissionsFor(interaction.guild.members.me);
-            if (!permissions?.has(PermissionFlagsBits.Connect) || !permissions?.has(PermissionFlagsBits.Speak)) {
-                return interaction.reply({ content: "❌ I need **Connect** and **Speak** permissions in your voice channel.", ephemeral: true });
+
+            const permissions =
+                voiceChannel.permissionsFor(
+                    interaction.guild.members.me
+                );
+
+
+            if (
+                !permissions?.has(PermissionFlagsBits.Connect) ||
+                !permissions?.has(PermissionFlagsBits.Speak)
+            ) {
+
+                return interaction.reply({
+                    content:
+                        "❌ I need Connect and Speak permissions in your voice channel.",
+                    ephemeral: true
+                });
+
             }
+
 
             await interaction.deferReply();
 
-            const shoukaku = interaction.client.shoukaku;
-            const node = shoukaku?.getIdealNode();
+
+            const shoukaku =
+                interaction.client.shoukaku;
+
+
+            const node =
+                shoukaku?.getIdealNode();
+
+
             if (!node) {
-                return interaction.editReply("❌ No Lavalink music node is currently connected. Check your Lavalink connection and try again in a moment.");
-            }
 
-            let queue = queueManager.get(interaction.guildId);
-
-            // Create a fresh queue + join voice if this guild doesn't have one yet,
-            // or if the previous player somehow died without cleaning up.
-            if (!queue || !queue.shoukakuPlayer) {
-                let player;
-                try {
-                    player = await shoukaku.joinVoiceChannel({
-                        guildId: interaction.guildId,
-                        channelId: voiceChannel.id,
-                        shardId: interaction.guild.shardId ?? 0,
-                        deaf: true
-                    });
-                } catch (err) {
-                    console.error(`[music] ❌ failed to join voice channel in guild ${interaction.guildId}:`, err.message);
-                    return interaction.editReply(`❌ Couldn't join your voice channel: \`${err.message}\``);
-                }
-
-                queue = queueManager.create({
-                    guildId: interaction.guildId,
-                    voiceChannelId: voiceChannel.id,
-                    textChannel: interaction.channel,
-                    shoukaku,
-                    shoukakuPlayer: player
-                });
-                registerPlayerEvents(queue);
-            }
-
-            const query = interaction.options.getString("query", true);
-
-            let result;
-            try {
-                result = await resolve(queue.shoukakuPlayer.node, query, { id: interaction.user.id, tag: interaction.user.tag });
-            } catch (err) {
-                console.error(`[music] ❌ resolve error for "${query}" in guild ${interaction.guildId}:`, err.message);
-                return interaction.editReply(`❌ ${err.message}`);
-            }
-
-            if (!result.tracks.length) {
-                return interaction.editReply("❌ No playable results found for that.");
-            }
-
-            queue.tracks.push(...result.tracks);
-
-            const wasIdle = !queue.current;
-            if (wasIdle) await playNext(queue, { respectTrackLoop: false });
-
-            const embed = new EmbedBuilder()
-                .setColor(MUSIC_COLOR)
-                .setDescription(
-                    result.tracks.length === 1
-                        ? `✅ Added **${result.tracks[0].title}** to the queue${wasIdle ? "" : ` (position #${queue.tracks.length})`}`
-                        : `✅ Added **${result.tracks.length} tracks**${result.playlistName ? ` from **${result.playlistName}**` : ""} to the queue`
+                return interaction.editReply(
+                    "❌ No Lavalink node connected. Check your Lavalink settings."
                 );
 
-            await interaction.editReply({ embeds: [embed] });
+            }
+
+
+
+            let queue =
+                queueManager.get(interaction.guildId);
+
+
+
+            if (!queue || !queue.shoukakuPlayer) {
+
+
+                let player;
+
+
+                try {
+
+                    player =
+                        await shoukaku.joinVoiceChannel({
+
+                            guildId: interaction.guildId,
+
+                            channelId: voiceChannel.id,
+
+                            shardId:
+                                interaction.guild.shardId ?? 0,
+
+                            deaf: true
+
+                        });
+
+
+                } catch (err) {
+
+
+                    console.error(
+                        `[music] ❌ Voice join failed: ${err.message}`
+                    );
+
+
+                    return interaction.editReply(
+                        `❌ Couldn't join voice channel: ${err.message}`
+                    );
+
+                }
+
+
+
+                queue =
+                    queueManager.create({
+
+                        guildId:
+                            interaction.guildId,
+
+                        voiceChannelId:
+                            voiceChannel.id,
+
+                        textChannel:
+                            interaction.channel,
+
+                        shoukaku,
+
+                        shoukakuPlayer:
+                            player
+
+                    });
+
+
+
+                registerPlayerEvents(queue);
+
+            }
+
+
+
+            const query =
+                interaction.options.getString(
+                    "query",
+                    true
+                );
+
+
+
+            let result;
+
+
+            try {
+
+                result =
+                    await resolve(
+                        queue.shoukakuPlayer.node,
+                        query,
+                        {
+                            id: interaction.user.id,
+                            tag: interaction.user.tag
+                        }
+                    );
+
+
+            } catch (err) {
+
+
+                console.error(
+                    `[music] Resolve error: ${err.message}`
+                );
+
+
+                return interaction.editReply(
+                    `❌ ${err.message}`
+                );
+
+            }
+
+
+
+            if (!result.tracks.length) {
+
+                return interaction.editReply(
+                    "❌ No playable results found."
+                );
+
+            }
+
+
+
+            queue.tracks.push(
+                ...result.tracks
+            );
+
+
+            const wasIdle =
+                !queue.current;
+
+
+
+            if (wasIdle) {
+
+                await playNext(
+                    queue,
+                    {
+                        respectTrackLoop:false
+                    }
+                );
+
+            }
+
+
+
+            const embed =
+                new EmbedBuilder()
+                    .setColor(MUSIC_COLOR)
+                    .setDescription(
+
+                        result.tracks.length === 1
+
+                        ? `✅ Added **${result.tracks[0].title}** to the queue.`
+
+                        : `✅ Added **${result.tracks.length} tracks** to the queue.`
+
+                    );
+
+
+
+            await interaction.editReply({
+                embeds:[embed]
+            });
+
         }
     },
+        // ==========================
+    // /pause
+    // ==========================
 
-    // -- /pause ----------------------------------------------------------------
     {
-        data: new SlashCommandBuilder().setName("pause").setDescription("Pause the current song"),
+        data: new SlashCommandBuilder()
+            .setName("pause")
+            .setDescription("Pause the current song"),
+
         async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || !queue.current) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if (!queue || !queue.current) {
+
+                return interaction.reply({
+                    content: "❌ Nothing is playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            if (!inSameVoice(interaction, queue)) {
+
+                return interaction.reply({
+                    content:"❌ You need to be in the same voice channel.",
+                    ephemeral:true
+                });
+
+            }
+
 
             await queue.shoukakuPlayer.setPaused(true);
+
             await sendOrUpdateNowPlaying(queue);
-            await interaction.reply({ content: "⏸ Paused.", ephemeral: true });
+
+
+            await interaction.reply({
+                content:"⏸️ Paused.",
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /resume -----------------------------------------------------------------
+
+    // ==========================
+    // /resume
+    // ==========================
+
     {
-        data: new SlashCommandBuilder().setName("resume").setDescription("Resume the current song"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || !queue.current) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
+        data:new SlashCommandBuilder()
+            .setName("resume")
+            .setDescription("Resume the current song"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue || !queue.current){
+
+                return interaction.reply({
+                    content:"❌ Nothing is playing.",
+                    ephemeral:true
+                });
+
+            }
+
 
             await queue.shoukakuPlayer.setPaused(false);
+
             await sendOrUpdateNowPlaying(queue);
-            await interaction.reply({ content: "▶️ Resumed.", ephemeral: true });
+
+
+            await interaction.reply({
+                content:"▶️ Resumed.",
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /skip -----------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder().setName("skip").setDescription("Skip the current song"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || !queue.current) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
 
-            const skipped = queue.current;
-            await playNext(queue, { respectTrackLoop: false });
-            await interaction.reply({ content: `⏭ Skipped **${skipped.title}**.`, ephemeral: true });
+    // ==========================
+    // /skip
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("skip")
+            .setDescription("Skip the current song"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue || !queue.current){
+
+                return interaction.reply({
+                    content:"❌ Nothing is playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            const skipped =
+                queue.current;
+
+
+            await playNext(queue,{
+                respectTrackLoop:false
+            });
+
+
+            await interaction.reply({
+
+                content:
+                    `⏭️ Skipped **${skipped.title}**.`,
+
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /previous ---------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder().setName("previous").setDescription("Play the previous song"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
 
-            const ok = await playPrevious(queue);
-            await interaction.reply({ content: ok ? "⏮ Playing the previous track." : "❌ No previous track in history.", ephemeral: true });
+    // ==========================
+    // /previous
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("previous")
+            .setDescription("Play the previous song"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue){
+
+                return interaction.reply({
+                    content:"❌ Nothing is playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            const success =
+                await playPrevious(queue);
+
+
+            await interaction.reply({
+
+                content:
+                    success
+                    ? "⏮️ Playing previous track."
+                    : "❌ No previous track.",
+
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /stop -----------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder().setName("stop").setDescription("Stop music, clear the queue, and disconnect"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
 
-            queue.tracks = [];
-            await destroyQueue(queue, `Stopped by ${interaction.user.tag}.`);
-            await interaction.reply({ content: "⏹ Stopped and disconnected.", ephemeral: true });
+    // ==========================
+    // /stop
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("stop")
+            .setDescription("Stop music and disconnect"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue){
+
+                return interaction.reply({
+                    content:"❌ Nothing playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            queue.tracks=[];
+
+
+            await destroyQueue(
+                queue,
+                `Stopped by ${interaction.user.tag}.`
+            );
+
+
+            await interaction.reply({
+                content:"⏹️ Stopped and disconnected.",
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /queue ------------------------------------------------------------------
+
+    // ==========================
+    // /queue
+    // ==========================
+
     {
-        data: new SlashCommandBuilder()
+        data:new SlashCommandBuilder()
             .setName("queue")
-            .setDescription("Show the music queue")
-            .addIntegerOption(o => o.setName("page").setDescription("Page number").setMinValue(1)),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || (!queue.current && queue.tracks.length === 0)) {
-                return interaction.reply({ content: "❌ The queue is empty.", ephemeral: true });
+            .setDescription("Show music queue")
+            .addIntegerOption(option =>
+                option
+                .setName("page")
+                .setDescription("Queue page")
+                .setMinValue(1)
+            ),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue){
+
+                return interaction.reply({
+                    content:"❌ Queue empty.",
+                    ephemeral:true
+                });
+
             }
-            const page = interaction.options.getInteger("page") || 1;
-            await interaction.reply({ embeds: [buildQueueEmbed(queue, page)] });
+
+
+            const page =
+                interaction.options.getInteger("page") || 1;
+
+
+            await interaction.reply({
+
+                embeds:[
+                    buildQueueEmbed(queue,page)
+                ]
+
+            });
+
         }
     },
 
-    // -- /shuffle ----------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder().setName("shuffle").setDescription("Shuffle the queue"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || queue.tracks.length < 2) return interaction.reply({ content: "❌ Not enough songs queued to shuffle.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
 
-            for (let i = queue.tracks.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [queue.tracks[i], queue.tracks[j]] = [queue.tracks[j], queue.tracks[i]];
+    // ==========================
+    // /shuffle
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("shuffle")
+            .setDescription("Shuffle queue"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue || queue.tracks.length < 2){
+
+                return interaction.reply({
+                    content:"❌ Not enough songs.",
+                    ephemeral:true
+                });
+
             }
+
+
+            queue.tracks.sort(
+                () => Math.random() - .5
+            );
+
 
             await sendOrUpdateNowPlaying(queue);
-            await interaction.reply({ content: "🔀 Queue shuffled.", ephemeral: true });
+
+
+            await interaction.reply({
+                content:"🔀 Queue shuffled.",
+                ephemeral:true
+            });
+
         }
     },
 
-    // -- /loop -------------------------------------------------------------------
+
+    // ==========================
+    // /loop
+    // ==========================
+
     {
-        data: new SlashCommandBuilder()
+        data:new SlashCommandBuilder()
             .setName("loop")
-            .setDescription("Set the loop mode")
-            .addStringOption(o => o
+            .setDescription("Change loop mode")
+            .addStringOption(option =>
+                option
                 .setName("mode")
-                .setDescription("Loop mode (leave blank to cycle through modes)")
+                .setDescription("Loop type")
                 .addChoices(
-                    { name: "Off", value: "off" },
-                    { name: "Current Song", value: "track" },
-                    { name: "Entire Queue", value: "queue" }
-                )),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
+                    {
+                        name:"Off",
+                        value:"off"
+                    },
+                    {
+                        name:"Current Song",
+                        value:"track"
+                    },
+                    {
+                        name:"Queue",
+                        value:"queue"
+                    }
+                )
+            ),
 
-            const chosen = interaction.options.getString("mode");
-            queue.loop = chosen || cycleLoop(queue.loop);
-            await sendOrUpdateNowPlaying(queue);
-            await interaction.reply({ content: `🔁 Loop mode: **${loopLabel(queue.loop)}**`, ephemeral: true });
-        }
-    },
+        async execute(interaction){
 
-    // -- /volume -----------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder()
-            .setName("volume")
-            .setDescription("Set or view the playback volume")
-            .addIntegerOption(o => o.setName("percent").setDescription("0-200").setMinValue(0).setMaxValue(200)),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
+            const queue =
+                queueManager.get(interaction.guildId);
 
-            const percent = interaction.options.getInteger("percent");
-            if (percent === null) {
-                return interaction.reply({ content: `🔊 Current volume: **${queue.volume}%**`, ephemeral: true });
+
+            if(!queue){
+
+                return interaction.reply({
+                    content:"❌ Nothing playing.",
+                    ephemeral:true
+                });
+
             }
-            if (!inSameVoice(interaction, queue)) return interaction.reply({ content: "❌ You need to be in the same voice channel.", ephemeral: true });
 
-            queue.volume = percent;
-            await queue.shoukakuPlayer.setGlobalVolume(percent);
+
+            queue.loop =
+                interaction.options.getString("mode")
+                ||
+                cycleLoop(queue.loop);
+
+
             await sendOrUpdateNowPlaying(queue);
-            await interaction.reply({ content: `🔊 Volume set to **${percent}%**`, ephemeral: true });
+
+
+            await interaction.reply({
+
+                content:
+                    `🔁 Loop mode: **${loopLabel(queue.loop)}**`,
+
+                ephemeral:true
+
+            });
+
         }
     },
 
-    // -- /nowplaying ---------------------------------------------------------------
-    {
-        data: new SlashCommandBuilder().setName("nowplaying").setDescription("Show the currently playing song"),
-        async execute(interaction) {
-            const queue = queueManager.get(interaction.guildId);
-            if (!queue || !queue.current) return interaction.reply({ content: "❌ Nothing is playing.", ephemeral: true });
 
-            await interaction.reply({ embeds: [buildNowPlayingEmbed(queue)], components: buildControlRows(queue) });
+    // ==========================
+    // /volume
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("volume")
+            .setDescription("Set volume")
+            .addIntegerOption(option =>
+                option
+                .setName("percent")
+                .setDescription("0-200")
+                .setMinValue(0)
+                .setMaxValue(200)
+            ),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue){
+
+                return interaction.reply({
+                    content:"❌ Nothing playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            const volume =
+                interaction.options.getInteger("percent");
+
+
+            if(volume === null){
+
+                return interaction.reply({
+
+                    content:
+                        `🔊 Volume: **${queue.volume}%**`,
+
+                    ephemeral:true
+
+                });
+
+            }
+
+
+            queue.volume =
+                volume;
+
+
+            await queue.shoukakuPlayer
+                .setGlobalVolume(volume);
+
+
+            await sendOrUpdateNowPlaying(queue);
+
+
+            await interaction.reply({
+
+                content:
+                    `🔊 Volume set to **${volume}%**.`,
+
+                ephemeral:true
+
+            });
+
+        }
+    },
+
+
+    // ==========================
+    // /nowplaying
+    // ==========================
+
+    {
+        data:new SlashCommandBuilder()
+            .setName("nowplaying")
+            .setDescription("Show current song"),
+
+        async execute(interaction){
+
+            const queue =
+                queueManager.get(interaction.guildId);
+
+
+            if(!queue || !queue.current){
+
+                return interaction.reply({
+                    content:"❌ Nothing playing.",
+                    ephemeral:true
+                });
+
+            }
+
+
+            await interaction.reply({
+
+                embeds:[
+                    buildNowPlayingEmbed(queue)
+                ],
+
+                components:
+                    buildControlRows(queue)
+
+            });
+
         }
     }
 
 ];
 
-module.exports = { musicSlashCommands, musicAutocomplete };
+
+
+module.exports = {
+    musicSlashCommands,
+    musicAutocomplete
+};
