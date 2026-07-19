@@ -1,0 +1,29 @@
+server:
+  port: 2333
+
+lavalink:
+  server:
+    password: "YOUR_PASSWORD_HERE"
+
+    sources:
+      youtube: false
+      bandcamp: true
+      soundcloud: true
+      twitch: false
+      vimeo: false
+      http: true
+      local: false
+
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+
+plugins:
+  youtube:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
