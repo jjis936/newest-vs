@@ -3,7 +3,7 @@ server:
 
 lavalink:
   server:
-    password: "YOUR_PASSWORD_HERE"
+    password: password: "weekendmusic123"
 
     sources:
       youtube: false
