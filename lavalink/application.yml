@@ -1,0 +1,19 @@
+server:
+  port: 2333
+
+lavalink:
+  server:
+    password: WeekendMusic123
+
+    sources:
+      youtube: true
+      soundcloud: true
+      bandcamp: true
+      http: true
+
+    bufferDurationMs: 400
+    frameBufferDurationMs: 1000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+
+    playerUpdateInterval: 5
