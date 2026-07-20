@@ -9,4 +9,7 @@ lavalink:
       youtube: true
       soundcloud: true
       bandcamp: true
-      http: true
+
+logging:
+  level:
+    root: INFO
