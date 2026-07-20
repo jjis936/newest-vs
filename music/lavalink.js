@@ -1,5 +1,5 @@
 // music/lavalink.js
-// Handles the Discord bot -> Lavalink connection through Shoukaku
+// Connects the Discord bot to your Railway Lavalink server using Shoukaku
 
 const { Shoukaku, Connectors } = require("shoukaku");
 
@@ -10,8 +10,7 @@ function initLavalink(client) {
     const nodes = [
         {
             name: "railway",
-            host: process.env.LAVALINK_HOST,
-            port: Number(process.env.LAVALINK_PORT || 2333),
+            url: `${process.env.LAVALINK_HOST}:${process.env.LAVALINK_PORT}`,
             auth: process.env.LAVALINK_PASSWORD,
             secure: process.env.LAVALINK_SECURE === "true"
         }
@@ -34,33 +33,33 @@ function initLavalink(client) {
     );
 
 
-    // Lavalink successfully connected
-    shoukaku.on("ready", (name) => {
-        console.log(`✅ Lavalink connected: ${name}`);
-    });
-
-
-    // Lavalink errors
-    shoukaku.on("error", (name, error) => {
-        console.error(`❌ Lavalink error ${name}:`, error);
-    });
-
-
-    // Lavalink disconnects
-    shoukaku.on("disconnect", (name, count) => {
-        console.log(`⚠️ Lavalink disconnected ${name} (${count})`);
-    });
-
-
-    // Node connects
     shoukaku.on("connect", (name) => {
         console.log(`🔗 Lavalink node connecting: ${name}`);
     });
 
 
+    shoukaku.on("ready", (name) => {
+        console.log(`✅ Lavalink connected: ${name}`);
+    });
+
+
+    shoukaku.on("error", (name, error) => {
+        console.error(`❌ Lavalink error ${name}:`, error);
+    });
+
+
+    shoukaku.on("disconnect", (name, count, reason) => {
+        console.log(`⚠️ Lavalink disconnected ${name}`, count, reason);
+    });
+
+
+    shoukaku.on("close", (name, code, reason) => {
+        console.log(`🔴 Lavalink closed ${name}`, code, reason);
+    });
+
+
     return shoukaku;
 }
-
 
 module.exports = {
     initLavalink
