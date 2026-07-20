@@ -1,18 +1,27 @@
+// music/lavalink.js
+
 const { Shoukaku, Connectors } = require("shoukaku");
 
-let shoukaku;
+let shoukaku = null;
 
 function initLavalink(client) {
 
     const node = {
         name: "railway",
-        url: `${process.env.LAVALINK_HOST}:${process.env.LAVALINK_PORT}`,
+
+        host: process.env.LAVALINK_HOST,
+
+        port: Number(process.env.LAVALINK_PORT || 443),
+
         auth: process.env.LAVALINK_PASSWORD,
+
         secure: process.env.LAVALINK_SECURE === "true"
     };
 
+
     console.log("🎵 Lavalink:");
-    console.log("Host:", node.url);
+    console.log("Host:", node.host);
+    console.log("Port:", node.port);
     console.log("Secure:", node.secure);
     console.log("Password:", node.auth ? "Loaded" : "Missing");
 
@@ -34,17 +43,22 @@ function initLavalink(client) {
 
 
     shoukaku.on("error", (name, error) => {
-        console.error(`❌ Lavalink error ${name}:`, error);
-    });
-
-
-    shoukaku.on("disconnect", (name, count) => {
-        console.log(`⚠️ Lavalink disconnected ${name} (${count})`);
+        console.error(`❌ Lavalink error (${name})`);
+        console.error(error);
     });
 
 
     shoukaku.on("close", (name, code, reason) => {
-        console.log(`⚠️ Lavalink closed ${name}`, code, reason);
+        console.log(
+            `⚠️ Lavalink closed ${name} | Code: ${code} | ${reason || "No reason"}`
+        );
+    });
+
+
+    shoukaku.on("disconnect", (name, count) => {
+        console.log(
+            `🔌 Lavalink disconnected ${name} (${count})`
+        );
     });
 
 
