@@ -1,55 +1,41 @@
 const { Shoukaku, Connectors } = require("shoukaku");
 
+let shoukaku;
+
 function initLavalink(client) {
-    const host = process.env.LAVALINK_HOST;
-    const port = Number(process.env.LAVALINK_PORT || 2333);
-    const password = process.env.LAVALINK_PASSWORD;
-    const secure = process.env.LAVALINK_SECURE === "true";
+    const nodes = [
+        {
+            name: "railway",
+            url: `${process.env.LAVALINK_HOST}:${process.env.LAVALINK_PORT}`,
+            auth: process.env.LAVALINK_PASSWORD,
+            secure: process.env.LAVALINK_SECURE === "true"
+        }
+    ];
 
     console.log("🎵 Lavalink connection:");
-    console.log("Host:", host);
-    console.log("Port:", port);
-    console.log("Secure:", secure);
+    console.log("Host:", process.env.LAVALINK_HOST);
+    console.log("Port:", process.env.LAVALINK_PORT);
+    console.log("Secure:", process.env.LAVALINK_SECURE);
 
-    if (!host || !password) {
-        console.error("❌ Missing Lavalink HOST or PASSWORD");
-        return null;
-    }
-
-    const shoukaku = new Shoukaku(
+    shoukaku = new Shoukaku(
         new Connectors.DiscordJS(client),
-        [
-            {
-                name: "main",
-                host: host,
-                port: port,
-                auth: password,
-                secure: secure
-            }
-        ],
+        nodes,
         {
             reconnectTries: 10,
-            reconnectInterval: 5000,
-            restTimeout: 15000
+            reconnectInterval: 5000
         }
     );
 
     shoukaku.on("ready", (name) => {
-        console.log(`🎶 Lavalink node "${name}" connected and ready`);
+        console.log(`✅ Lavalink node ${name} connected`);
     });
 
     shoukaku.on("error", (name, error) => {
-        console.error(`❌ Lavalink error ${name}:`, error);
+        console.error(`❌ Lavalink ${name} error:`, error);
     });
 
     shoukaku.on("close", (name, code, reason) => {
-        console.log(
-            `⚠️ Lavalink closed ${name}: ${code} ${reason || ""}`
-        );
-    });
-
-    shoukaku.on("disconnect", (name) => {
-        console.log(`⚠️ Lavalink disconnected: ${name}`);
+        console.log(`⚠️ Lavalink ${name} closed`, code, reason);
     });
 
     return shoukaku;
