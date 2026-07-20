@@ -1,5 +1,4 @@
 // music/lavalink.js
-// Connects the Discord bot to your Railway Lavalink server using Shoukaku
 
 const { Shoukaku, Connectors } = require("shoukaku");
 
@@ -10,7 +9,8 @@ function initLavalink(client) {
     const nodes = [
         {
             name: "railway",
-            url: `${process.env.LAVALINK_HOST}:${process.env.LAVALINK_PORT}`,
+            host: process.env.LAVALINK_HOST,
+            port: Number(process.env.LAVALINK_PORT || 2333),
             auth: process.env.LAVALINK_PASSWORD,
             secure: process.env.LAVALINK_SECURE === "true"
         }
@@ -33,11 +33,6 @@ function initLavalink(client) {
     );
 
 
-    shoukaku.on("connect", (name) => {
-        console.log(`🔗 Lavalink node connecting: ${name}`);
-    });
-
-
     shoukaku.on("ready", (name) => {
         console.log(`✅ Lavalink connected: ${name}`);
     });
@@ -48,13 +43,13 @@ function initLavalink(client) {
     });
 
 
-    shoukaku.on("disconnect", (name, count, reason) => {
-        console.log(`⚠️ Lavalink disconnected ${name}`, count, reason);
+    shoukaku.on("close", (name, code, reason) => {
+        console.log(`⚠️ Lavalink closed ${name}:`, code, reason);
     });
 
 
-    shoukaku.on("close", (name, code, reason) => {
-        console.log(`🔴 Lavalink closed ${name}`, code, reason);
+    shoukaku.on("disconnect", (name, count, reason) => {
+        console.log(`🔌 Lavalink disconnected ${name}:`, count, reason);
     });
 
 
