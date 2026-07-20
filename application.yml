@@ -1,0 +1,76 @@
+server:
+  port: ${PORT:2333}
+  address: 0.0.0.0
+
+lavalink:
+  # Uncomment this block (and set the matching keys) if you want native
+  # Spotify/Apple Music/Deezer search quality instead of the ytsearch/
+  # scsearch fallback the bot already uses without it. Not required for
+  # the stutter fix or for music to work.
+  # plugins:
+  #   - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.2.0"
+  #     repository: "https://maven.lavalink.dev/releases"
+
+  server:
+    password: "${LAVALINK_SERVER_PASSWORD}"
+    # ^ MUST exactly match LAVALINK_PASSWORD in the bot's Railway env vars.
+
+    sources:
+      youtube: true
+      soundcloud: true
+      bandcamp: true
+      twitch: true
+      vimeo: true
+      http: false
+      local: false
+
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+
+    # THE STUTTER/SKIP FIX: this is how far ahead Lavalink buffers audio
+    # before sending it out. The default (400ms) is tight enough that any
+    # brief CPU spike or network jitter on the Lavalink server causes an
+    # audible stutter or skip. Raising it gives Lavalink more room to
+    # absorb that before you ever hear it.
+    # Trade-off: playback takes marginally longer to actually start after
+    # hitting play (the extra buffer has to fill first).
+    bufferDurationMs: 1000
+
+    # How much audio can queue up per track before frames start getting
+    # dropped instead of stuttering further behind - raised alongside the
+    # bigger buffer above so it doesn't become the new bottleneck.
+    frameBufferDurationMs: 5000
+
+    opusEncodingQuality: 10
+    resamplingQuality: LOW
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    playerUpdateInterval: 5
+    youtubePlaylistLoadLimit: 6
+
+metrics:
+  prometheus:
+    enabled: false
+
+sentry:
+  dsn: ""
+
+logging:
+  level:
+    root: INFO
+    lavalink: INFO
+  request:
+    enabled: false
+  logback:
+    rollingpolicy:
+      max-file-size: 1GB
+      max-history: 5
