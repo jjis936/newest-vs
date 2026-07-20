@@ -1,33 +1,35 @@
 // music/lavalink.js
-// Handles the Lavalink connection for the Discord bot
+// Connects the Discord bot to your Railway Lavalink server through Shoukaku.
 
 const { Shoukaku, Connectors } = require("shoukaku");
 
 function initLavalink(client) {
 
     const host = process.env.LAVALINK_HOST;
-    const port = Number(process.env.LAVALINK_PORT || 2333);
+    const port = process.env.LAVALINK_PORT || "2333";
     const password = process.env.LAVALINK_PASSWORD;
     const secure = process.env.LAVALINK_SECURE === "true";
 
-    console.log("🎵 Lavalink configuration:");
+    if (!host || !password) {
+        console.error(
+            "❌ Missing Lavalink variables. Required:\n" +
+            "LAVALINK_HOST\n" +
+            "LAVALINK_PASSWORD\n" +
+            "LAVALINK_PORT"
+        );
+    }
+
+    console.log("🎵 Lavalink connection:");
     console.log(`Host: ${host}`);
     console.log(`Port: ${port}`);
     console.log(`Secure: ${secure}`);
 
-    if (!host || !password) {
-        console.error(
-            "❌ Missing Lavalink variables. Need LAVALINK_HOST and LAVALINK_PASSWORD."
-        );
-        return null;
-    }
-
     const nodes = [
         {
             name: "main",
-            url: `${host}:${port}`,
+            url: `${secure ? "https" : "http"}://${host}:${port}`,
             auth: password,
-            secure: secure
+            secure
         }
     ];
 
@@ -35,27 +37,24 @@ function initLavalink(client) {
         new Connectors.DiscordJS(client),
         nodes,
         {
-            reconnectTries: 20,
-            reconnectInterval: 5000,
             moveOnDisconnect: false,
             resume: true,
             resumeTimeout: 60,
-            restTimeout: 15000
+            reconnectTries: 20,
+            reconnectInterval: 5000,
+            restTimeout: 30000
         }
     );
 
 
-    shoukaku.on("ready", (name, resumed) => {
-        console.log(
-            `🎶 Lavalink connected: ${name}` +
-            (resumed ? " (session resumed)" : "")
-        );
+    shoukaku.on("ready", (name) => {
+        console.log(`✅ [lavalink] Node "${name}" connected and ready`);
     });
 
 
     shoukaku.on("error", (name, error) => {
         console.error(
-            `❌ Lavalink node error (${name}):`,
+            `❌ [lavalink] Node "${name}" error:`,
             error?.message || error
         );
     });
@@ -63,21 +62,21 @@ function initLavalink(client) {
 
     shoukaku.on("close", (name, code, reason) => {
         console.warn(
-            `⚠️ Lavalink closed (${name}) Code: ${code} ${reason || ""}`
+            `⚠️ [lavalink] Node "${name}" closed (${code}) ${reason || ""}`
         );
     });
 
 
     shoukaku.on("disconnect", (name) => {
         console.warn(
-            `⚠️ Lavalink disconnected: ${name}`
+            `⚠️ [lavalink] Node "${name}" disconnected. Reconnecting...`
         );
     });
 
 
     shoukaku.on("reconnecting", (name, tries, interval) => {
         console.log(
-            `🔄 Reconnecting Lavalink ${name} (${tries}) every ${interval}ms`
+            `🔄 [lavalink] Reconnecting "${name}" (${tries} tries left, ${interval}ms)`
         );
     });
 
