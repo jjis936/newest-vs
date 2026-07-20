@@ -1,5 +1,3 @@
-// music/lavalink.js
-
 const { Shoukaku, Connectors } = require("shoukaku");
 
 let shoukaku;
@@ -8,87 +6,49 @@ function initLavalink(client) {
 
     const node = {
         name: "railway",
-
-        host: process.env.LAVALINK_HOST,
-
-        port: Number(process.env.LAVALINK_PORT || 443),
-
+        url: `${process.env.LAVALINK_HOST}:${process.env.LAVALINK_PORT}`,
         auth: process.env.LAVALINK_PASSWORD,
-
-        secure: true
+        secure: process.env.LAVALINK_SECURE === "true"
     };
 
-
     console.log("🎵 Lavalink:");
-    console.log(`${node.host}:${node.port}`);
+    console.log("Host:", node.url);
     console.log("Secure:", node.secure);
-    console.log(
-        "Password:",
-        node.auth ? "Loaded" : "Missing"
-    );
+    console.log("Password:", node.auth ? "Loaded" : "Missing");
 
 
     shoukaku = new Shoukaku(
         new Connectors.DiscordJS(client),
         [node],
         {
-
             reconnectTries: Infinity,
-
             reconnectInterval: 5000,
-
-            resume: true,
-
-            resumeTimeout: 60,
-
-            moveOnDisconnect: false
-
+            resume: true
         }
     );
 
 
     shoukaku.on("ready", (name) => {
-
-        console.log(
-            `✅ Lavalink connected: ${name}`
-        );
-
+        console.log(`✅ Lavalink connected: ${name}`);
     });
 
 
     shoukaku.on("error", (name, error) => {
-
-        console.error(
-            `❌ Lavalink error ${name}`
-        );
-
-        console.error(error);
-
+        console.error(`❌ Lavalink error ${name}:`, error);
     });
 
 
     shoukaku.on("disconnect", (name, count) => {
-
-        console.log(
-            `⚠️ Lavalink disconnected ${name} (${count})`
-        );
-
+        console.log(`⚠️ Lavalink disconnected ${name} (${count})`);
     });
 
 
     shoukaku.on("close", (name, code, reason) => {
-
-        console.log(
-            `⚠️ Lavalink closed ${name}`,
-            code,
-            reason
-        );
-
+        console.log(`⚠️ Lavalink closed ${name}`, code, reason);
     });
 
 
     return shoukaku;
-
 }
 
 
