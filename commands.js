@@ -287,7 +287,7 @@ async function askAI(question){
 
     try{
         const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2441,25 +2441,7 @@ const buttonHandlers = {
     async app_deny(interaction){
         await reviewApplication(interaction, "denied");
     }
-
-};
-
-async function reviewApplication(interaction, decision){
-
-    if(!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)){
-        return interaction.reply({ content: "❌ Only staff can review applications.", ephemeral: true });
-    }
-
-    const appId = interaction.customId.replace(/^app_(accept|deny)_/, "");
-    const apps = applicationsDB.read();
-    const application = apps.entries.find(a => a.id === appId);
-
-    if(!application){
-        return interaction.reply({ content: "❌ Application not found (may have already been reviewed).", ephemeral: true });
-    }
-
-    application.status = decision;
-    application.reviewedBy = interaction.user.id;
+reviewedBy = interaction.user.id;
     applicationsDB.write(apps);
 
     const emoji = decision === "accepted" ? "✅" : "❌";
@@ -3173,3 +3155,6 @@ module.exports = {
     handleSecurityChecks,
     handleAuditLogEntry
 };
+};
+
+async function reviewApplication(interaction, decision){
